@@ -25,6 +25,7 @@ def main():
     parser.add_argument("--save_path", required=False, help="Override save path in config")
     parser.add_argument("--bits", required=False, help="Override bits in config")
     parser.add_argument("--group_size", required=False, help="Override group_size in config")
+    parser.add_argument("--nsamples", required=False, help="Override nsamples in config")
     parser.add_argument("--list", action="store_true", help="List all available methods")
     args = parser.parse_args()
     load_all_methods()
@@ -44,6 +45,8 @@ def main():
         config["wbits"] = args.bits
     if args.group_size:
         config["group_size"] = args.group_size
+    if args.nsamples:
+        config["nsamples"] = args.nsamples
     run_func = get_method(args.method)
     run_func(config)
 if __name__ == "__main__":

@@ -5,3 +5,4 @@ group_size: 128
 save_path: output/llama-2-7b-GPTQ-3bit-g128
 act_order: true
 CUDA_VISIBLE_DEVICES: "0"
+nsamples: 128

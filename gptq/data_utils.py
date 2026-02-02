@@ -403,11 +403,19 @@ def get_loaders(
     
     if name.lower() in ["arc_c", "arc_e", "hellaswag", "boolq", "piqa", "winogrande"]:
         return data, None
-    if 'mix' in name:
-        wiki_train,wiki_val=get_wikitext2(nsamples//3, seed, seqlen, model, tokenizer)
-        boolq_train,boolq_val=get_boolq(nsamples//3, seed, seqlen, model, tokenizer)
-        piqa_train,piqa_val=get_piqa(nsamples//3, seed, seqlen, model, tokenizer)
-        winogrande_train,winogrande_val=get_winogrande(nsamples//3, seed, seqlen, model, tokenizer)
+    if name.lower() == "mix":
+        wiki_train,wiki_val=get_wikitext2(nsamples//4, seed, seqlen, model, tokenizer)
+        boolq_train=get_boolq(nsamples//4, seqlen, tokenizer, seed=seed)
+        piqa_train=get_piqa(nsamples//4, seqlen, tokenizer, seed=seed)
+        winogrande_train=get_winogrande(nsamples//4, seqlen, tokenizer, seed=seed)
+        train=wiki_train+boolq_train+piqa_train+winogrande_train
+        val=None
+        return train,val
+    elif name.lower() == "mix128":
+        wiki_train,wiki_val=get_wikitext2(nsamples, seed, seqlen, model, tokenizer)
+        boolq_train=get_boolq(nsamples, seqlen, tokenizer, seed=seed)
+        piqa_train=get_piqa(nsamples, seqlen, tokenizer, seed=seed)
+        winogrande_train=get_winogrande(nsamples, seqlen, tokenizer, seed=seed)
         train=wiki_train+boolq_train+piqa_train+winogrande_train
         val=None
         return train,val

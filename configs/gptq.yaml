@@ -1,0 +1,7 @@
+model_path: meta-llama/Llama-2-7b-hf
+dataset: wikitext2
+wbits: 3
+group_size: 128
+save_path: output/llama-2-7b-GPTQ-3bit-g128
+act_order: true
+CUDA_VISIBLE_DEVICES: "0"

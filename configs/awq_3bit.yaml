@@ -1,0 +1,12 @@
+model_path: meta-llama/Llama-2-7b-hf
+model_name: llama-7b
+
+w_bit: 3
+q_group_size: 128
+
+run_awq: true
+q_backend: fake
+tasks: wikitext
+dataset: wikitext2
+awq_cache_dir: awq_cache
+dump_awq: output/llama-2-7b-AWQ-3

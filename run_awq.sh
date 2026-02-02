@@ -1,0 +1,1 @@
+CUDA_VISIBLE_DEVICES=1 python run_quant.py --method awq --config configs/awq.yaml

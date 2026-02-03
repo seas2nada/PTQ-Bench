@@ -1,6 +1,41 @@
 import torch
 from datasets import load_dataset
 
+def format_piqa(ex):
+    goal = ex["goal"].strip()
+    sol1 = ex["sol1"].strip()
+    sol2 = ex["sol2"].strip()
+    # PIQA는 2-choice라 A/B로 두는 게 깔끔
+    return (
+        f"Goal: {goal}\n"
+        f"Choices:\n"
+        f"A. {sol1}\n"
+        f"B. {sol2}\n"
+        f"Answer:"
+    )
+
+def format_winograde(ex):
+    # winogrande: sentence에 '_' 빈칸이 있고 option1/2 중 하나로 채움
+    sent = ex["sentence"].strip()
+    opt1 = ex["option1"].strip()
+    opt2 = ex["option2"].strip()
+    return (
+        f"Sentence: {sent}\n"
+        f"Choices:\n"
+        f"A. {opt1}\n"
+        f"B. {opt2}\n"
+        f"Answer:"
+    )
+
+def format_boolq(ex):
+    passage = ex["passage"].strip()
+    question = ex["question"].strip()
+
+    return (
+        f"Passage: {passage}\n"
+        f"Question: {question}\n"
+        f"Answer:"
+    )
 
 def get_calib_dataset(data="pileval", tokenizer=None, n_samples=512, block_size=512):
     if data == "pileval":
@@ -11,6 +46,15 @@ def get_calib_dataset(data="pileval", tokenizer=None, n_samples=512, block_size=
     )
     elif data == 'wikitext2':
         dataset = load_dataset('Salesforce/wikitext', 'wikitext-2-raw-v1', split='train')
+    elif data == 'boolq':
+        dataset = load_dataset('boolq', split='train')
+        dataset = dataset.map(lambda ex: {"text": format_boolq(ex)}, remove_columns=dataset.column_names)
+    elif data == 'piqa':
+        dataset = load_dataset('piqa', split='train')
+        dataset = dataset.map(lambda ex: {"text": format_piqa(ex)}, remove_columns=dataset.column_names)
+    elif data == 'winogrande':
+        dataset = load_dataset('winogrande', 'winogrande_xl', split='train')
+        dataset = dataset.map(lambda ex: {"text": format_winograde(ex)}, remove_columns=dataset.column_names)
     else:
         raise NotImplementedError
     dataset = dataset.shuffle(seed=42)

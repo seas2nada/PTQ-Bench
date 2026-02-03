@@ -73,6 +73,12 @@ parser.add_argument(
     default="wikitext2",
     help="dataset for awq calibration",
 )
+parser.add_argument(
+    "--nsamples",
+    type=int,
+    default=128,
+    help="number of samples for awq calibration",
+)
 args = parser.parse_args()
 vila_10_quant_mode = ("llava" in args.model_path.lower() or "vila" in args.model_path.lower()) and not args.vila_15
 
@@ -178,7 +184,7 @@ def build_model_and_enc(model_path):
                 enc,
                 w_bit=args.w_bit,
                 q_config=q_config,
-                n_samples=128,
+                n_samples=args.nsamples,
                 seqlen=512,
                 calib_data=args.dataset,
             )

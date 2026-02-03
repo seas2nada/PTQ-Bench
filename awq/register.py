@@ -13,6 +13,7 @@ def run(config):
     tasks = config.get("tasks", "wikitext")
 
     awq_cache_file = f"{config.get('awq_cache_dir', 'awq_cache')}/{model_name}-w{w_bit}-g{q_group_size}.pt"
+    dump_fake = config["save_path"]
     # entry_py = os.path.join(os.path.dirname(__file__), "awq", "entry")
     env = os.environ.copy()
 
@@ -24,7 +25,10 @@ def run(config):
             "--w_bit", str(w_bit),
             "--q_group_size", str(q_group_size),
             "--run_awq",
-            "--dump_awq", awq_cache_file
+            "--dump_awq", awq_cache_file,
+            "--dump_fake", dump_fake,
+            "--nsamples", str(config["nsamples"]),
+            "--dataset", config["dataset"],
         ]
         print("Running AWQ search:", " ".join(search_cmd))
         subprocess.run(search_cmd, env=env, check=True)
@@ -37,7 +41,8 @@ def run(config):
         "--w_bit", str(w_bit),
         "--q_group_size", str(q_group_size),
         "--load_awq", awq_cache_file,
-        "--q_backend", q_backend
+        "--q_backend", q_backend,
+        "--dump_fake", dump_fake
     ]
     print("Running AWQ evaluation:", " ".join(eval_cmd))
     subprocess.run(eval_cmd, env=env, check=True)

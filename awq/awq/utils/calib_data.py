@@ -44,6 +44,12 @@ def get_calib_dataset(data="pileval", tokenizer=None, n_samples=512, block_size=
         dataset = load_dataset(
         'json', data_files={'train': '/path/to/c4/en/c4-train.00000-of-01024.json'}, split='train'
     )
+    if data == "pileval":
+        dataset = load_dataset("mit-han-lab/pile-val-backup", split="validation")
+    elif data == 'c4':
+        dataset = load_dataset(
+        'json', data_files={'train': '/path/to/c4/en/c4-train.00000-of-01024.json'}, split='train'
+    )
     elif data == 'wikitext2':
         dataset = load_dataset('Salesforce/wikitext', 'wikitext-2-raw-v1', split='train')
     elif data == 'boolq':
@@ -55,6 +61,16 @@ def get_calib_dataset(data="pileval", tokenizer=None, n_samples=512, block_size=
     elif data == 'winogrande':
         dataset = load_dataset('winogrande', 'winogrande_xl', split='train')
         dataset = dataset.map(lambda ex: {"text": format_winograde(ex)}, remove_columns=dataset.column_names)
+    elif data == 'mix':
+        from datasets import concatenate_datasets
+        ds_boolq = load_dataset('boolq', split='train').select(range(n_samples // 4))
+        ds_piqa = load_dataset('piqa', split='train').select(range(n_samples // 4))
+        ds_wiki2 = load_dataset('Salesforce/wikitext', 'wikitext-2-raw-v1', split='train').select(range(n_samples // 4))
+        ds_wino = load_dataset('winogrande', 'winogrande_xl', split='train').select(range(n_samples // 4))
+        ds_boolq = ds_boolq.map(lambda ex: {"text": format_boolq(ex)}, remove_columns=ds_boolq.column_names)
+        ds_piqa = ds_piqa.map(lambda ex: {"text": format_piqa(ex)}, remove_columns=ds_piqa.column_names)
+        ds_wino = ds_wino.map(lambda ex: {"text": format_winograde(ex)}, remove_columns=ds_wino.column_names)
+        dataset = concatenate_datasets([ds_boolq, ds_piqa, ds_wiki2, ds_wino])
     else:
         raise NotImplementedError
     dataset = dataset.shuffle(seed=42)

@@ -8,5 +8,4 @@ run_awq: true
 q_backend: fake
 tasks: wikitext
 dataset: wikitext2
-awq_cache_dir: awq_cache
-dump_awq: output/llama-2-7b-AWQ-4
+save_path: output/llama-2-7b-AWQ-4

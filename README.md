@@ -6,6 +6,24 @@ This repository contains the evaluation codes for the paper **[Benchmarking Post
 
 ## 🚀 Usage
 
+### 0. Custom installation from dhkim
+Change username, dir, ... etc in build_docker.sh
+```bash
+. build_docker.sh
+```
+
+Get into docker
+```bash
+cd /path/to/PTQ-Bench
+cd /path/to/PTQ-Bench/awq
+pip install -e .
+cd /path/to/PTQ-Bench/awq/awq/kernels
+python setup.py install
+```
+
+Note:
+transformers==4.37.2
+
 ### 1. Environment Setup
 
 ```bash

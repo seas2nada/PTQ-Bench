@@ -1,7 +1,7 @@
 from utils.register import register_method
 import os
 import subprocess
-@register_method("gptq")
+@register_method("c-gptq")
 def run(config):
     model_path = config["model_path"]
     dataset = config["dataset"]
@@ -11,15 +11,19 @@ def run(config):
     device = config.get("CUDA_VISIBLE_DEVICES", None)
     act_order = config.get("act_order", False)
     cmd = [
-        "python", "gptq/run.py",
+        "python", "c-gptq/run.py",
         model_path, dataset,
         "--wbits", wbits,
         "--save", save_path,
         "--groupsize", str(group_size),
-        "--nsamples", str(config["nsamples"])
+        "--h-out", save_path + "/h_out.pt",
+        "--h-pi", str(config["h_pi"])
     ]
     if act_order:
         cmd.append("--act-order")
+    if config.get("h_in"):
+        cmd.append("--h-in")
+        cmd.append(config["h_in"])
     # if device:
     #     env = {"CUDA_VISIBLE_DEVICES": device, **os.environ}
     # else:

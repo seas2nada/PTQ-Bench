@@ -15,7 +15,8 @@ def run(config):
         model_path, dataset,
         "--wbits", wbits,
         "--save", save_path,
-        "--groupsize", str(group_size)
+        "--groupsize", str(group_size),
+        "--nsamples", str(config["nsamples"])
     ]
     if act_order:
         cmd.append("--act-order")

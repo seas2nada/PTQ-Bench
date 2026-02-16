@@ -316,7 +316,6 @@ def llama_sequential(model, dataloader, dev, args):
                 if q_junc > args.stab_junc_mult * fp_junc:
                     if args.stab_route_downproj_bit > 0:
                         wbits_down = max(args.wbits, 0)
-                        requantize_downproj_only(percdamp_try, wbits_down)
 
                         if not is_layer_finite(layer, inps, attention_mask, position_ids, dev,
                                                nprobe=args.stab_jac_nsamples):

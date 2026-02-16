@@ -9,7 +9,7 @@ def load_config(path):
         return yaml.safe_load(f)
 def load_all_methods():
     methods_dir = os.path.join(os.path.dirname(__file__))
-    for method_name in ['gptq', "QuIP", "OmniQuant", "awq"]:
+    for method_name in ['gptq', "QuIP", "OmniQuant", "awq", "qep", "proposed", "constab"]:
         method_path = os.path.join(methods_dir, method_name, 'register.py')
         if os.path.isfile(method_path):
             module_name = f"{method_name}.register"
@@ -27,6 +27,7 @@ def main():
     parser.add_argument("--group_size", required=False, help="Override group_size in config")
     parser.add_argument("--nsamples", required=False, help="Override nsamples in config")
     parser.add_argument("--list", action="store_true", help="List all available methods")
+    parser.add_argument("--qep", action="store_true", help="Enable QEP")
     args = parser.parse_args()
     load_all_methods()
 
@@ -47,6 +48,10 @@ def main():
         config["group_size"] = args.group_size
     if args.nsamples:
         config["nsamples"] = args.nsamples
+    if args.method:
+        config["method"] = args.method
+    if args.qep:
+        config["qep"] = args.qep
     run_func = get_method(args.method)
     run_func(config)
 if __name__ == "__main__":

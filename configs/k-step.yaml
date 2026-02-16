@@ -1,0 +1,13 @@
+model_path: meta-llama/Llama-2-7b-hf
+model_name: llama-7b
+
+w_bit: 4
+q_group_size: 128
+
+q_backend: fake
+tasks: wikitext
+dataset: wikitext2
+save_path: output/llama-2-7b-proposed-4
+kstep: 4
+kstep_ridge: 0.1
+kstep_lambdas: [1.0, 1.0, 1.0, 1.0]

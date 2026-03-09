@@ -9,7 +9,7 @@ def load_config(path):
         return yaml.safe_load(f)
 def load_all_methods():
     methods_dir = os.path.join(os.path.dirname(__file__))
-    for method_name in ['gptq', "QuIP", "OmniQuant", "awq", "c-gptq"]:
+    for method_name in ['gptq', "QuIP", "OmniQuant", "awq", "c-gptq", "qep", "proposed", "constab", "paptq", "qep_constab"]:
         method_path = os.path.join(methods_dir, method_name, 'register.py')
         if os.path.isfile(method_path):
             module_name = f"{method_name}.register"
@@ -27,6 +27,7 @@ def main():
     parser.add_argument("--group_size", required=False, help="Override group_size in config")
     parser.add_argument("--nsamples", required=False, help="Override nsamples in config")
     parser.add_argument("--list", action="store_true", help="List all available methods")
+    parser.add_argument("--qep", action="store_true", help="Enable QEP")
     parser.add_argument("--h-in", required=False, help="Path to previous Hessian/Gram state (torch.save).")
     parser.add_argument("--h-out", required=False, help="Path to save updated Hessian/Gram state (torch.save).")
     parser.add_argument("--h-pi", required=False, help="Task weight π_t for current calibration set.")
@@ -54,6 +55,16 @@ def main():
         config["group_size"] = args.group_size
     if args.nsamples:
         config["nsamples"] = args.nsamples
+    if args.method:
+        config["method"] = args.method
+    if args.qep:
+        config["qep"] = args.qep
+    if args.h_in:
+        config["h_in"] = args.h_in
+    if args.h_out:
+        config["h_out"] = args.h_out
+    if args.h_pi:
+        config["h_pi"] = args.h_pi
     if args.h_in:
         config["h_in"] = args.h_in
     if args.h_out:

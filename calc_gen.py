@@ -24,6 +24,24 @@ cont = {
     4: Row(ppl=5.58, boolq=79.88, piqa=77.75, wino=68.59),
     3: Row(ppl=6.18, boolq=74.74, piqa=76.39, wino=67.56),
     2: Row(ppl=49.44, boolq=49.56, piqa=55.50, wino=52.96),
+=======
+    hellaswag: float
+    arce: float
+    arcc: float
+
+# From the 7-metric "Sequence" table:
+# single := WikiText2 (init)
+# cont   := -> WinoGrande (step)
+
+single = {
+    4: Row7(ppl=5.58, boolq=77.89, piqa=77.80, wino=68.35, hellaswag=56.59, arce=75.38, arcc=42.15),
+    3: Row7(ppl=6.20, boolq=72.75, piqa=75.90, wino=66.69, hellaswag=53.72, arce=71.68, arcc=39.42),
+}
+
+cont = {
+    4: Row7(ppl=5.57, boolq=78.96, piqa=78.02, wino=69.06, hellaswag=56.83, arce=75.67, arcc=42.58),
+    3: Row7(ppl=6.20, boolq=76.18, piqa=77.15, wino=66.30, hellaswag=55.09, arce=74.45, arcc=41.81),
+>>>>>>> 6facc3c7bd4fc4afa50ca1bd476c0fb816502f98
 }
 
 # --------------------------------------------
@@ -49,6 +67,9 @@ for w in [4, 3, 2]:
         "BoolQ": rel_improve_higher_better(s.boolq, c.boolq),
         "PIQA":  rel_improve_higher_better(s.piqa, c.piqa),
         "Wino":  rel_improve_higher_better(s.wino, c.wino),
+        "hellaswag": rel_improve_higher_better(s.hellaswag, c.hellaswag),
+        "arce": rel_improve_higher_better(s.arce, c.arce),
+        "arcc": rel_improve_higher_better(s.arcc, c.arcc),
     }
     detail[w] = d
     improvements.extend(list(d.values()))

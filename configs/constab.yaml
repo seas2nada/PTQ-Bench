@@ -1,0 +1,25 @@
+model_path: meta-llama/Llama-2-7b-hf
+model_name: llama-7b
+
+w_bit: 4
+q_group_size: 128
+
+q_backend: fake
+tasks: wikitext
+dataset: wikitext2
+save_path: output/llama-2-7b-constab-gptq-4
+
+# ConStab-GPTQ (Contraction-Stabilized GPTQ)
+stab_tau: 1.05
+stab_iters: 3
+stab_damp_mult: 2.0
+stab_max_percdamp: 0.2
+stab_jac_nsamples: 16
+stab_jac_power: 1
+stab_scope: block
+stab_use_sigma: 1
+stab_junc_mult: 3.0
+# stab_route_after: 2
+# stab_route_downproj_bit: 0
+# stab_gain_calib: false
+# stab_gain_nsamples: 8

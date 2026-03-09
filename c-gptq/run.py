@@ -75,6 +75,14 @@ if __name__ == '__main__':
                         help='Path to save updated Hessian/Gram state (torch.save).')
     parser.add_argument('--h-pi', type=float, default=1.0,
                         help='Task weight π_t for current calibration set.')
+    parser.add_argument('--use_spd', action='store_true',
+                        help='Whether to use SPD for calibration.')
+    parser.add_argument('--spdmode', type=str, default="spd",
+                        help='SPD mode.')
+    parser.add_argument('--h-beta', type=float, default=1.0,
+                        help='SPD beta.')
+    parser.add_argument('--spd-block', type=int, default=1,
+                        help='SPD block size.')
 
     args = parser.parse_args()
     tokenizer = None

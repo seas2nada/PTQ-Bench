@@ -17,13 +17,24 @@ def run(config):
         "--save", save_path,
         "--groupsize", str(group_size),
         "--h-out", save_path + "/h_out.pt",
-        "--h-pi", str(config["h_pi"])
+        "--h-pi", str(config["h_pi"]),
     ]
     if act_order:
         cmd.append("--act-order")
     if config.get("h_in"):
         cmd.append("--h-in")
         cmd.append(config["h_in"])
+    if config.get("use_spd"):
+        cmd.append("--use_spd")
+    if config.get("spdmode"):
+        cmd.append("--spdmode")
+        cmd.append(config["spdmode"])
+    if config.get("h_beta"):
+        cmd.append("--h-beta")
+        cmd.append(str(config["h_beta"]))
+    if config.get("spd_block"):
+        cmd.append("--spd-block")
+        cmd.append(str(config["spd_block"]))
     # if device:
     #     env = {"CUDA_VISIBLE_DEVICES": device, **os.environ}
     # else:

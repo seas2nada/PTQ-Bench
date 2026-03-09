@@ -9,6 +9,79 @@ from quant import *
 
 import os, torch
 
+def make_spd(A: torch.Tensor, eps: float = 1e-4):
+    # A: [d,d] float32 on GPU
+    A = 0.5 * (A + A.t())
+    d = torch.diag(A)
+    damp = eps * torch.mean(d)
+    idx = torch.arange(A.shape[0], device=A.device)
+    A[idx, idx] += damp
+    return A
+
+def spd_distance(A, B, mode="logeuc", block=128, eps=1e-4):
+    A = make_spd(A, eps)
+    B = make_spd(B, eps)
+    d = A.shape[0]
+    dist2 = torch.zeros((), device=A.device, dtype=A.dtype)
+
+    for s in range(0, d, block):
+        e = min(s + block, d)
+        Ab = A[s:e, s:e]
+        Bb = B[s:e, s:e]
+
+        if mode == "logeuc":
+            # d = ||log A - log B||_F
+            wa, Va = torch.linalg.eigh(Ab)
+            wb, Vb = torch.linalg.eigh(Bb)
+            wa = torch.clamp(wa, min=eps)
+            wb = torch.clamp(wb, min=eps)
+
+            logAb = (Va * wa.log().unsqueeze(0)) @ Va.t()
+            logBb = (Vb * wb.log().unsqueeze(0)) @ Vb.t()
+
+            diff = logAb - logBb
+            dist2 = dist2 + (diff * diff).sum()
+
+        elif mode == "airm":
+            # d = ||log( A^{-1/2} B A^{-1/2} )||_F
+
+            # 1) Ab^{-1/2}
+            wa, Va = torch.linalg.eigh(Ab)
+            wa = torch.clamp(wa, min=eps)
+            inv_sqrt_wa = wa.rsqrt()  # 1/sqrt
+            Ab_inv_sqrt = (Va * inv_sqrt_wa.unsqueeze(0)) @ Va.t()
+
+            # 2) C = Ab^{-1/2} Bb Ab^{-1/2}
+            C = Ab_inv_sqrt @ Bb @ Ab_inv_sqrt
+            C = make_spd(C, eps)  # 수치 오차로 비대칭/PSD 깨질 수 있어 방어
+
+            # 3) log(C)
+            wc, Vc = torch.linalg.eigh(C)
+            wc = torch.clamp(wc, min=eps)
+            logC = (Vc * wc.log().unsqueeze(0)) @ Vc.t()
+
+            dist2 = dist2 + (logC * logC).sum()
+
+        elif mode == "logdiag":
+            da = torch.clamp(torch.diag(Ab), min=eps).log()
+            db = torch.clamp(torch.diag(Bb), min=eps).log()
+            dist2 = dist2 + ((da - db) ** 2).sum()
+
+        else:
+            raise ValueError(f"Unknown distance option: {mode}")
+
+    return torch.sqrt(dist2)
+
+
+def adaptive_pi_from_spd_distance(H_new, H_prev_mix, base_pi, mode="logeuc", beta=1e-3, block=128):
+    if H_prev_mix is None:
+        return base_pi
+    d = spd_distance(H_new, H_prev_mix, mode=mode, block=block, eps=1e-4)
+
+    # shift 큰 경우 pi 감소(보수적)
+    pi = base_pi * torch.exp(-beta * d)
+    return float(pi.clamp(min=1e-4 * base_pi, max=1.0 * base_pi).item())
+
 def key_to_path(hdir, key):
     return os.path.join(hdir, key.replace('/', '_') + "_H.pt")
 
@@ -85,7 +158,7 @@ def llama_sequential(model, dataloader, dev, args):
     attention_mask = cache['attention_mask']
     position_ids = cache['position_ids']
 
-    print('Ready.')    
+    print('Ready.')
 
     quantizers = {}
     from tqdm import tqdm
@@ -137,6 +210,11 @@ def llama_sequential(model, dataloader, dev, args):
 
                 # (2) 이전 누적 H_sum만 "이 key"에 대해서만 로드
                 H_prev_sum, wprev = load_h(args.h_in, key, device=dev, dtype=torch.float32)
+
+                # SPD distance
+                if args.use_spd and H_prev_sum is not None:
+                    H_prev_mix = (H_prev_sum / wprev) if (H_prev_sum is not None and wprev > 0) else None
+                    pi = adaptive_pi_from_spd_distance(H_new, H_prev_mix, pi, mode=args.spdmode, beta=args.h_beta, block=args.spd_block)
 
                 if H_prev_sum is None:
                     H_sum = pi * H_new
@@ -356,6 +434,22 @@ if __name__ == '__main__':
     parser.add_argument(
         '--h-pi', type=float, default=1.0,
         help='Task weight π_t for current calibration set.'
+    )
+    parser.add_argument(
+        '--use_spd', action='store_true',
+        help='Whether to use SPD distance.'
+    )
+    parser.add_argument(
+        '--spdmode', type=str, default="logeuc",
+        help='SPD distance mode.'
+    )
+    parser.add_argument(
+        '--spd_block', type=int, default=128,
+        help='SPD distance block size.'
+    )
+    parser.add_argument(
+        '--h_beta', type=float, default=1e-3,
+        help='SPD distance beta.'
     )
 
     args = parser.parse_args()

@@ -79,10 +79,10 @@ def get_ptb(nsamples, seed, seqlen, model, tokenizer=None):
 def get_c4(nsamples, seed, seqlen, model, tokenizer=None):
     print("get_c4")
     traindata = load_dataset(
-        'json', data_files={'train': '/path/to/c4/en/c4-train.00000-of-01024.json.gz'}, split='train'
+        'allenai/c4', data_files={'train': 'en/c4-train.00000-of-01024.json.gz'}, split='train'
     )
     valdata = load_dataset(
-        'json', data_files={'validation': '/path/to/c4/en/c4-validation.00000-of-00008.json.gz'}, split='validation'
+        'allenai/c4', data_files={'validation': 'en/c4-validation.00000-of-00008.json.gz'}, split='validation'
     )
 
     if tokenizer is None:

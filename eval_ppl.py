@@ -5,8 +5,8 @@ from data_utils import *
 @torch.no_grad()
 def llm_eval(model, args, tokenizer, dev):
     print('Evaluating ...')
-    # for dataset in ["wikitext2","c4"]:
-    for dataset in ["wikitext2"]:
+    for dataset in ["wikitext2","c4"]:
+    # for dataset in ["c4"]:
         dataloader, testloader = get_loaders(
             dataset, seed=args.seed, model=args.model, seqlen=model.seqlen, tokenizer=tokenizer
         )

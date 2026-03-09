@@ -30,6 +30,10 @@ def main():
     parser.add_argument("--h-in", required=False, help="Path to previous Hessian/Gram state (torch.save).")
     parser.add_argument("--h-out", required=False, help="Path to save updated Hessian/Gram state (torch.save).")
     parser.add_argument("--h-pi", required=False, help="Task weight π_t for current calibration set.")
+    parser.add_argument("--use_spd", action="store_true", help="Use SPD for calibration.")
+    parser.add_argument("--spdmode", required=False, help="SPD mode.")
+    parser.add_argument("--h-beta", required=False, help="SPD beta.")
+    parser.add_argument("--spd-block", required=False, help="SPD block size.")
     args = parser.parse_args()
     load_all_methods()
 
@@ -56,6 +60,14 @@ def main():
         config["h_out"] = args.h_out
     if args.h_pi:
         config["h_pi"] = args.h_pi
+    if args.use_spd:
+        config["use_spd"] = args.use_spd
+    if args.spdmode:
+        config["spdmode"] = args.spdmode
+    if args.h_beta:
+        config["h_beta"] = args.h_beta
+    if args.spd_block:
+        config["spd_block"] = args.spd_block
     run_func = get_method(args.method)
     run_func(config)
 if __name__ == "__main__":

@@ -10,6 +10,113 @@ def set_seed(seed):
     np.random.seed(seed)
     torch.random.manual_seed(seed)
 
+import torch
+import random
+from datasets import load_dataset
+
+def format_humaneval(ex):
+    # HumanEval has "prompt" which contains function signature and docstring
+    prompt = ex["prompt"].strip()
+    # Add instruction to write code
+    return f"Write a Python function to solve the following problem:\n{prompt}\nSolution:"
+
+def get_humaneval(nsamples, seqlen, tokenizer, seed=0, eval_mode=False):
+    # HumanEval only has "test" split
+    split = "test"
+    ds = load_dataset("openai_humaneval", split=split)
+    
+    if eval_mode:
+        return ds
+    
+    random.seed(seed)
+    trainloader = []
+    for _ in range(nsamples):
+        idx = random.randint(0, len(ds) - 1)
+        enc = tokenizer(format_humaneval(ds[idx]), return_tensors="pt")
+        L = enc.input_ids.shape[1]
+        if L >= seqlen:
+            i = random.randint(0, L - seqlen)
+            inp = enc.input_ids[:, i:i+seqlen]
+        else:
+            inp = torch.nn.functional.pad(
+                enc.input_ids,
+                (0, seqlen - L),
+                value=tokenizer.pad_token_id or 0,
+            )
+        tar = inp.clone()
+        tar[:, :-1] = -100
+        trainloader.append((inp, tar))
+    return trainloader
+
+def format_medqa(ex):
+    # MedQA example has "question", "options", "answer_idx"
+    question = ex["question"].strip()
+    options = ex["choices"]
+    # options might be a list of strings
+    options_str = "\n".join([f"{chr(65+i)}. {opt}" for i, opt in enumerate(options)])
+    return f"Question: {question}\nOptions:\n{options_str}\nAnswer:"
+
+def get_medqa(nsamples, seqlen, tokenizer, seed=0, eval_mode=False):
+    # Use "medqa" dataset, assuming splits: train, validation, test
+    split = "train" if not eval_mode else "test"
+    try:
+        ds = load_dataset("medqa", split=split)
+    except:
+        # fallback to bigbio/med_qa
+        ds = load_dataset("bigbio/med_qa", name="med_qa_en_bigbio_qa", split=split)
+    if eval_mode:
+        return ds
+    random.seed(seed)
+    trainloader = []
+    for _ in range(nsamples):
+        idx = random.randint(0, len(ds) - 1)
+        enc = tokenizer(format_medqa(ds[idx]), return_tensors="pt")
+        L = enc.input_ids.shape[1]
+        if L >= seqlen:
+            i = random.randint(0, L - seqlen)
+            inp = enc.input_ids[:, i:i+seqlen]
+        else:
+            inp = torch.nn.functional.pad(
+                enc.input_ids,
+                (0, seqlen - L),
+                value=tokenizer.pad_token_id or 0,
+            )
+        tar = inp.clone()
+        tar[:, :-1] = -100
+        trainloader.append((inp, tar))
+    return trainloader
+
+def format_truthfulqa(ex):
+    # TruthfulQA generation: has "question"
+    question = ex["question"].strip()
+    return f"Question: {question}\nAnswer:"
+
+def get_truthfulqa(nsamples, seqlen, tokenizer, seed=0, eval_mode=False):
+    # TruthfulQA generation subset has only "validation" split
+    split = "validation"
+    ds = load_dataset("truthful_qa", "generation", split=split)
+    if eval_mode:
+        return ds
+    random.seed(seed)
+    trainloader = []
+    for _ in range(nsamples):
+        idx = random.randint(0, len(ds) - 1)
+        enc = tokenizer(format_truthfulqa(ds[idx]), return_tensors="pt")
+        L = enc.input_ids.shape[1]
+        if L >= seqlen:
+            i = random.randint(0, L - seqlen)
+            inp = enc.input_ids[:, i:i+seqlen]
+        else:
+            inp = torch.nn.functional.pad(
+                enc.input_ids,
+                (0, seqlen - L),
+                value=tokenizer.pad_token_id or 0,
+            )
+        tar = inp.clone()
+        tar[:, :-1] = -100
+        trainloader.append((inp, tar))
+    return trainloader
+
 def format_piqa(ex):
     goal = ex["goal"].strip()
     sol1 = ex["sol1"].strip()
@@ -61,6 +168,11 @@ def format_hellaswag(ex):
 
     opts = "\n".join([f"{labels[i]}. {endings[i]}" for i in range(4)])
     return f"Context: {ctx}\nEndings:\n{opts}\nAnswer:"
+
+def format_gsm8k(ex):
+    question = ex["question"].strip()
+    answer = ex["answer"].strip()
+    return f"Question: {question}\nAnswer:"
 
 def get_pile(nsamples, seed, seqlen, model, tokenizer=None):
     print("get_pile")
@@ -128,10 +240,10 @@ def get_ptb(nsamples, seed, seqlen, model, tokenizer=None):
 def get_c4(nsamples, seed, seqlen, model, tokenizer=None):
     print("get_c4")
     traindata = load_dataset(
-        'json', data_files={'train': '/path/to/c4/en/c4-train.00000-of-01024.json.gz'}, split='train'
+        'allenai/c4', data_files={'train': 'en/c4-train.00000-of-01024.json.gz'}, split='train'
     )
     valdata = load_dataset(
-        'json', data_files={'validation': '/path/to/c4/en/c4-validation.00000-of-00008.json.gz'}, split='validation'
+        'allenai/c4', data_files={'validation': 'en/c4-validation.00000-of-00008.json.gz'}, split='validation'
     )
 
     if tokenizer is None:
@@ -370,6 +482,36 @@ def get_piqa(nsamples, seqlen, tokenizer, seed=0, eval_mode=False):
 
     return trainloader
 
+def get_gsm8k(nsamples, seqlen, tokenizer, seed=0, eval_mode=False):
+    split = "train" if not eval_mode else "validation"
+    ds = load_dataset("gsm8k", "main", split=split)
+
+    if eval_mode:
+        return ds
+
+    random.seed(seed)
+    trainloader = []
+    for _ in range(nsamples):
+        idx = random.randint(0, len(ds) - 1)
+        enc = tokenizer(format_gsm8k(ds[idx]), return_tensors="pt")
+
+        L = enc.input_ids.shape[1]
+        if L >= seqlen:
+            i = random.randint(0, L - seqlen)
+            inp = enc.input_ids[:, i:i + seqlen]
+        else:
+            inp = torch.nn.functional.pad(
+                enc.input_ids,
+                (0, seqlen - L),
+                value=tokenizer.pad_token_id or 0,
+            )
+
+        tar = inp.clone()
+        tar[:, :-1] = -100
+        trainloader.append((inp, tar))
+
+    return trainloader
+
 def get_loaders(
     name, nsamples=128, seed=0, seqlen=2048, model='', tokenizer=None
 ):
@@ -400,8 +542,16 @@ def get_loaders(
         data = get_piqa(nsamples, seqlen, tokenizer, seed=seed)      
     if name.lower() == "winogrande":
         data = get_winogrande(nsamples, seqlen, tokenizer, seed=seed)
+    if name.lower() == "gsm8k":
+        data = get_gsm8k(nsamples, seqlen, tokenizer, seed=seed)
+    if name.lower() == "humaneval":
+        data = get_humaneval(nsamples, seqlen, tokenizer, seed=seed)
+    if name.lower() == "medqa":
+        data = get_medqa(nsamples, seqlen, tokenizer, seed=seed)
+    if name.lower() == "truthfulqa":
+        data = get_truthfulqa(nsamples, seqlen, tokenizer, seed=seed)
     
-    if name.lower() in ["arc_c", "arc_e", "hellaswag", "boolq", "piqa", "winogrande"]:
+    if name.lower() in ["arc_c", "arc_e", "hellaswag", "boolq", "piqa", "winogrande", "gsm8k", "humaneval", "medqa", "truthfulqa"]:
         return data, None
     if name.lower() == "mix":
         wiki_train,wiki_val=get_wikitext2(nsamples//4, seed, seqlen, model, tokenizer)

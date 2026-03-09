@@ -26,9 +26,9 @@ def run(config):
         "--stab-scope", str(config["stab_scope"]),
         "--stab-use-sigma", str(config["stab_use_sigma"]),
         "--stab-junc-mult", str(config["stab_junc_mult"]),
-        "--stab-route-after", str(config["stab_route_after"]),
-        "--stab-route-downproj-bit", str(config["stab_route_downproj_bit"]),
-        "--stab-gain-nsamples", str(config["stab_gain_nsamples"]),
+        # "--stab-route-after", str(config["stab_route_after"]),
+        # "--stab-route-downproj-bit", str(config["stab_route_downproj_bit"]),
+        # "--stab-gain-nsamples", str(config["stab_gain_nsamples"]),
     ]
     if act_order:
         cmd.append("--act-order")

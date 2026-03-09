@@ -9,7 +9,7 @@ def load_config(path):
         return yaml.safe_load(f)
 def load_all_methods():
     methods_dir = os.path.join(os.path.dirname(__file__))
-    for method_name in ['gptq', "QuIP", "OmniQuant", "awq", "c-gptq", "qep", "proposed", "constab"]:
+    for method_name in ['gptq', "QuIP", "OmniQuant", "awq", "c-gptq", "qep", "proposed", "constab", "paptq", "qep_constab"]:
         method_path = os.path.join(methods_dir, method_name, 'register.py')
         if os.path.isfile(method_path):
             module_name = f"{method_name}.register"

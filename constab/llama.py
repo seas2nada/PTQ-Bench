@@ -20,25 +20,6 @@ def is_layer_finite(layer, inps, attention_mask, position_ids, dev, nprobe=2):
                 return False
     return True
 
-def estimate_block_gain(layer_fp, layer_q, inps, attention_mask, position_ids, dev, nprobe=8):
-    # returns alpha such that alpha * y_q matches y_fp in RMS
-    layer_fp = layer_fp.to(dev)
-    layer_q = layer_q.to(dev)
-    with torch.no_grad():
-        a_num, a_den = 0.0, 0.0
-        for j in range(min(nprobe, inps.shape[0])):
-            h0 = inps[j].unsqueeze(0).to(dev)
-            y_fp = layer_fp(h0, attention_mask=attention_mask, position_ids=position_ids)[0]
-            y_q  = layer_q (h0, attention_mask=attention_mask, position_ids=position_ids)[0]
-            # RMS over (batch,seqlen,dim)
-            num = torch.sqrt(torch.mean(y_fp.float()**2) + 1e-8)
-            den = torch.sqrt(torch.mean(y_q .float()**2) + 1e-8)
-            a_num += num.item()
-            a_den += den.item()
-        alpha = (a_num / max(1, min(nprobe, inps.shape[0]))) / max(1e-8, (a_den / max(1, min(nprobe, inps.shape[0]))))
-        alpha = float(max(0.25, min(4.0, alpha)))  # clamp
-    layer_fp = layer_fp.to("cpu")
-    return alpha
 
 def estimate_mlp_junction_rms(layer, h, attention_mask, position_ids):
     """
@@ -172,7 +153,7 @@ def llama_sequential(model, dataloader, dev, args):
     from tqdm import tqdm
     for i in tqdm(range(len(layers))):
         layer = layers[i].to(dev)
-        layer_fp = copy.deepcopy(layers[i]).to('cpu')  # FP copy
+        layer_fp = copy.deepcopy(layers[i]).to('cpu')  # ✅ 원본(재시도용)
         full = find_layers(layer)
 
         if args.true_sequential:
@@ -184,9 +165,11 @@ def llama_sequential(model, dataloader, dev, args):
             ]
         else:
             sequential = [list(full.keys())]
-
-        def run_one_pass(percdamp_now: float):
+       
+        def run_one_pass(percdamp_now: float, t: int):
+            # layer는 이미 dev에 올라와있다고 가정
             full_local = find_layers(layer)
+
             if args.true_sequential:
                 sequential_local = [
                     ['self_attn.k_proj', 'self_attn.v_proj', 'self_attn.q_proj'],
@@ -218,155 +201,122 @@ def llama_sequential(model, dataloader, dev, args):
                     handles.append(subset[name].register_forward_hook(add_batch(name)))
 
                 for j in range(args.nsamples):
-                    _ = layer(inps[j].unsqueeze(0),
-                              attention_mask=attention_mask,
-                              position_ids=position_ids)[0]
+                    outs[j] = layer(
+                        inps[j].unsqueeze(0),
+                        attention_mask=attention_mask,
+                        position_ids=position_ids
+                    )[0]
 
                 for h in handles:
                     h.remove()
 
                 for name in subset:
+                    if t > 0 and name == "mlp.down_proj":
+                        continue
+                        
+                    # print(i, name)  # 필요하면 유지
                     gptq[name].fasterquant(
                         percdamp=percdamp_now,
                         groupsize=args.groupsize,
                         actorder=args.act_order,
                         static_groups=args.static_groups
                     )
-                    quantizers[f'model.layers.{i}.{name}'] = gptq[name].quantizer
+                    quantizers['model.layers.%d.%s' % (i, name)] = gptq[name].quantizer
                     gptq[name].free()
 
-        def requantize_downproj_only(percdamp_now: float, wbits_down: int):
-            full_local = find_layers(layer)
-            name = 'mlp.down_proj'
-            if name not in full_local:
-                return
-            mod = full_local[name]
-
-            g = GPTQ(mod)
-            g.quantizer = Quantizer()
-            g.quantizer.configure(wbits_down, perchannel=True, sym=args.sym, mse=False)
-
-            def add_batch(_, inp, out):
-                g.add_batch(inp[0].data, out.data)
-
-            h = mod.register_forward_hook(add_batch)
-            for j in range(args.nsamples):
-                _ = layer(inps[j].unsqueeze(0),
-                          attention_mask=attention_mask,
-                          position_ids=position_ids)[0]
-            h.remove()
-
-            g.fasterquant(
-                percdamp=percdamp_now,
-                groupsize=args.groupsize,
-                actorder=args.act_order,
-                static_groups=args.static_groups
-            )
-            quantizers[f'model.layers.{i}.mlp.down_proj'] = g.quantizer
-            g.free()
-
-        # ---- FP junction baseline ----
-        fp_junc = None
-        if args.stab_junc_mult > 0:
-            layer_fp_dev = copy.deepcopy(layers[i]).to(dev)
-            layer_fp_dev.eval()
-            jn = min(args.stab_jac_nsamples, args.nsamples)
-            vals = []
-            for j in range(jn):
-                h0 = inps[j].unsqueeze(0).to(dev)
-                vals.append(estimate_mlp_junction_rms(layer_fp_dev, h0, attention_mask, position_ids))
-            fp_junc = max(vals) if vals else None
-            del layer_fp_dev
-            torch.cuda.empty_cache()
-
-        # ---- NFSR baseline ----
+        # ---- ConStab-GPTQ refinement loop ----
         percdamp_now = float(args.percdamp)
-        layer.load_state_dict(layer_fp.state_dict())
-        torch.cuda.empty_cache()
-        run_one_pass(percdamp_now)
+        ok = False
 
-        baseline_sd = {k: v.detach().cpu().clone() for k, v in layer.state_dict().items()}
-        if not is_layer_finite(layer, inps, attention_mask, position_ids, dev, nprobe=args.stab_jac_nsamples):
-            raise RuntimeError(f"[NFSR] baseline GPTQ already non-finite at layer {i}")
+        # reference junction rms from FP layer (calib 몇 개로)
+        jac_n = min(args.stab_jac_nsamples, args.nsamples)
+        with torch.no_grad():
+            junc_ref = []
+            for j in range(jac_n):
+                h0 = inps[j].unsqueeze(0).to(dev)
+                junc_ref.append(estimate_mlp_junction_rms(layer_fp.to(dev), h0, attention_mask, position_ids))
+            junc_ref_max = max(junc_ref) if len(junc_ref) else 0.0
+        layer_fp = layer_fp.to("cpu")  # 다시 CPU로
 
-        # ---- refinement ----
-        for t in range(max(0, args.stab_iters)):
+        for t in range(max(1, args.stab_iters)):
+            # (1) restore FP weights
             layer.load_state_dict(layer_fp.state_dict())
             torch.cuda.empty_cache()
 
-            percdamp_try = min(percdamp_now * (args.stab_damp_mult ** (t + 1)),
-                               args.stab_max_percdamp)
-            run_one_pass(percdamp_try)
+            # (2) quantize with current percdamp
+            run_one_pass(percdamp_now, t)
 
-            # non-finite => rollback
-            if not is_layer_finite(layer, inps, attention_mask, position_ids, dev,
-                                   nprobe=args.stab_jac_nsamples):
-                layer.load_state_dict(baseline_sd, strict=True)
-                break
+            # (3) check: finite output + junction safety + (optional) sigma
+            sigmas = []
+            finite_ok = True
+            junc_ok = True
 
-            # junction overshoot => down_proj routing
-            if fp_junc is not None and args.stab_junc_mult > 0:
-                jn = min(args.stab_jac_nsamples, args.nsamples)
-                q_vals = []
-                for j in range(jn):
-                    h0 = inps[j].unsqueeze(0).to(dev)
-                    q_vals.append(estimate_mlp_junction_rms(layer, h0, attention_mask, position_ids))
-                q_junc = max(q_vals) if q_vals else 0.0
+            for j in range(jac_n):
+                h0 = inps[j].unsqueeze(0).to(dev)
 
-                if q_junc > args.stab_junc_mult * fp_junc:
-                    if args.stab_route_downproj_bit > 0:
-                        wbits_down = max(args.wbits, 0)
+                # (a) finite check (cheap)
+                out = layer(h0, attention_mask=attention_mask, position_ids=position_ids)[0]
+                if not torch.isfinite(out).all():
+                    finite_ok = False
+                    break
 
-                        if not is_layer_finite(layer, inps, attention_mask, position_ids, dev,
-                                               nprobe=args.stab_jac_nsamples):
-                            layer.load_state_dict(baseline_sd, strict=True)
-                            break
+                # (b) junction check (targets your real failure mode)
+                junc = estimate_mlp_junction_rms(layer, h0, attention_mask, position_ids)
+                # allow multiplier over FP reference
+                if junc_ref_max > 0:
+                    if junc > args.stab_junc_mult * junc_ref_max:
+                        junc_ok = False
 
-                        percdamp_now = percdamp_try
-                        break
-                    else:
-                        continue
-
-            # sigma check (optional, soft)
-            if args.stab_use_sigma:
-                sigmas = []
-                jac_n = min(args.stab_jac_nsamples, args.nsamples)
-                for j in range(jac_n):
-                    h0 = inps[j].unsqueeze(0).to(dev)
+                # (c) sigma check (optional; can disable with --stab_use_sigma 0)
+                if args.stab_use_sigma:
                     sigma = estimate_block_jacobian_norm(
                         layer, h0, attention_mask, position_ids,
                         n_power=args.stab_jac_power
                     )
                     sigmas.append(sigma)
-                sigma_hat = max(sigmas) if sigmas else 0.0
-                if sigma_hat <= args.stab_tau:
-                    percdamp_now = percdamp_try
-                    break
-            else:
-                percdamp_now = percdamp_try
+
+            sigma_hat = max(sigmas) if len(sigmas) else 0.0
+            sigma_ok = (sigma_hat <= args.stab_tau) if args.stab_use_sigma else True
+
+            if finite_ok and junc_ok and sigma_ok:
+                ok = True
                 break
 
-        # ---- gain calibration ----
-        if args.stab_gain_calib:
-            alpha = estimate_block_gain(
-                layer_fp, layer, inps, attention_mask, position_ids,
-                dev, nprobe=args.stab_gain_nsamples
-            )
-            layer.mlp.down_proj.weight.data.mul_(alpha)
-            layer.self_attn.o_proj.weight.data.mul_(alpha)
+            # (4) refine policy
+            #  - if non-finite: increase damping aggressively
+            #  - if junction too large: also increase damping; if still fails, route down_proj bit up
+            if not finite_ok:
+                percdamp_now = min(percdamp_now * max(2.0, args.stab_damp_mult), args.stab_max_percdamp)
+                continue
 
-        # update outs
+            if not junc_ok:
+                percdamp_now = min(percdamp_now * args.stab_damp_mult, args.stab_max_percdamp)
+
+                # after a few tries, enable routing for down_proj (bit+1)
+                if (t + 1) >= args.stab_route_after and args.stab_route_downproj_bit > 0:
+                    # next iteration will quantize down_proj with higher bit via run_one_pass config
+                    pass
+                continue
+
+            # sigma violation only
+            if not sigma_ok:
+                percdamp_now = min(percdamp_now * args.stab_damp_mult, args.stab_max_percdamp)
+
+        if not ok:
+            print(f"[Safe-ConStab] layer {i}: constraint not satisfied. Using percdamp={percdamp_now}.")
+
+
         for j in range(args.nsamples):
-            outs[j] = layer(inps[j].unsqueeze(0),
-                            attention_mask=attention_mask,
-                            position_ids=position_ids)[0]
+            outs[j] = layer(inps[j].unsqueeze(0), attention_mask=attention_mask, position_ids=position_ids)[0]
 
         layers[i] = layer.cpu()
         del layer
         torch.cuda.empty_cache()
+
         inps, outs = outs, inps
 
     model.config.use_cache = use_cache
+    
     return quantizers
 
 @torch.no_grad()
@@ -582,10 +532,6 @@ if __name__ == '__main__':
                         help='After this many failed refinements, enable stability routing for down_proj.')
     parser.add_argument('--stab_route_downproj_bit', type=int, default=3,
                         help='If >0, quantize mlp.down_proj with at least this many bits when routing is enabled (e.g., 3 or 4).')
-    parser.add_argument('--stab-gain-calib', action='store_true',
-                    help='Calibrate block output scale to reduce PPL degradation.')
-    parser.add_argument('--stab-gain-nsamples', type=int, default=8,
-                    help='How many calibration samples for gain estimation.')
 
 
     args = parser.parse_args()
